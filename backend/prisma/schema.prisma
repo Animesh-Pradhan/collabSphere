@@ -1,0 +1,228 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                       String               @id @default(cuid())
+  firstName                String
+  lastName                 String
+  email                    String               @unique
+  mobileNo                 String?              @unique @db.VarChar(10)
+  password                 String?
+  avatar                   String?
+  username                 String?              @unique
+  lastActiveOrganisationId String?
+  //AUTH
+  isEmailVerified          Boolean              @default(false)
+  isMobileVerified         Boolean              @default(false)
+  lastLoginAt              DateTime?
+  signupSource             String               @default("email")
+  twoFactorAuthentication  Boolean              @default(false)
+  //SSO
+  googleId                 String?              @unique
+  facebookId               String?              @unique
+  microsoftId              String?              @unique
+  //SECURITY
+  failedAttempts           Int                  @default(0)
+  lockedUntil              DateTime?
+  //ONBARDING
+  isOnboarded              Boolean              @default(false)
+  onBoardingStep           Int                  @default(1)
+  //AUDIT
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  deletedAt                DateTime?
+  membership               OrganisationMember[]
+  userDevice               UserDevice[]
+  userSessions             UserSession[]
+  notificatios             Notification[]
+  emailOtps                EmailOtp[]
+
+  @@index([mobileNo])
+  @@index([email])
+  @@index([username])
+  @@index([lastLoginAt])
+  @@index([signupSource])
+  @@index([isOnboarded, onBoardingStep])
+  @@index([createdAt])
+}
+
+model Organisation {
+  id                  String               @id @default(cuid())
+  name                String
+  logo                String?
+  slug                String               @unique
+  timezone            String               @default("Asia/Kolkata")
+  address             String?
+  country             String?
+  //BILLING
+  plan                String               @default("free")
+  billingEmail        String?
+  trialEndsAt         DateTime?
+  subscriptionId      String?              @unique
+  billingStatus       String?              @default("active")
+  //SETTINGS
+  aiFeature           Boolean              @default(false)
+  notification        Boolean              @default(true)
+  customDomain        String?              @unique
+  //AUDIT
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  lastActiveAt        DateTime?
+  members             OrganisationMember[]
+  organisationInvites OrganisationInvite[]
+
+  @@index([slug])
+  @@index([subscriptionId])
+  @@index([customDomain])
+  @@index([plan])
+  @@index([country])
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  GUEST
+}
+
+enum MemberStatus {
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+model OrganisationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organisationId String
+  role           Role         @default(MEMBER)
+  status         MemberStatus @default(ACTIVE)
+  joinedAt       DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  removedAt      DateTime?
+  lastActiveAt   DateTime?
+  invitedBy      String?
+  invitedAt      DateTime?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organisationId])
+  @@index([organisationId, role])
+  @@index([userId])
+  @@index([organisationId])
+  @@index([role])
+  @@index([status])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model OrganisationInvite {
+  id             String       @id @default(cuid())
+  organisationId String
+  email          String
+  role           Role         @default(MEMBER)
+  tokenHash      String
+  status         InviteStatus @default(PENDING)
+  expiresAt      DateTime
+  invitedBy      String
+  invitedAt      DateTime     @default(now())
+  acceptedAt     DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash, status])
+  @@index([organisationId])
+  @@index([email])
+  @@index([status])
+}
+
+model UserDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceType String
+  userAgent  String?
+  ipAddress  String?
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastActive])
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  userId     String
+  gateToken  String   @unique
+  vaultToken String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, isRead, createdAt])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  userId         String?
+  organizationId String?
+  action         String
+  description    String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model EmailOtp {
+  id         String    @id @default(cuid())
+  userId     String
+  email      String
+  otpHash    String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+}
