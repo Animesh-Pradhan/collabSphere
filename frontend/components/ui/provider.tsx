@@ -89,8 +89,11 @@ const config = defineConfig({
           DEFAULT: { value: "{colors.gray.100}" },
         },
         text: {
-          primary: { value: { base: "#000", _dark: "#34094e" } },
+          primary: { value: { base: "#000", _dark: "#fff" } },
           secondary: { value: { base: "#e9e4e4", _dark: "#2c2c2c" } },
+        },
+        button: {
+          primary: { value: { base: "#000", _dark: "#34094e" } },
         }
       }
     },

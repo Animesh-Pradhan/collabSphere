@@ -1,10 +1,10 @@
-import { ReactNode } from "react";
+import { IconType } from "react-icons";
 import { LuLayoutDashboard, LuFolder, LuUsers, LuSettings } from "react-icons/lu";
 
 export interface SidebarRoute {
     label: string;
     path: string;
-    icon: ReactNode;
+    icon: IconType;
 }
 
 export const SIDEBAR_ROUTES = [
