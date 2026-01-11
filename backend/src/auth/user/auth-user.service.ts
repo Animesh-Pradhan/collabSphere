@@ -38,6 +38,24 @@ export class AuthUserService {
         return { gateToken, vaultToken };
     }
 
+    private async trackUserDevice(userId: string, userAgent?: string, ipAddress?: string) {
+        if (!userAgent) return;
+
+        const existingDevice = await this.prisma.userDevice.findFirst({ where: { userId, userAgent } });
+        if (existingDevice) {
+            await this.prisma.userDevice.update({
+                where: { id: existingDevice.id },
+                data: { lastActive: new Date(), ipAddress }
+            });
+            return;
+        }
+        await this.prisma.userDevice.create({
+            data: {
+                userId, userAgent, ipAddress, deviceType: 'web'
+            }
+        });
+    }
+
     async create(dto: CreateUserDto) {
         const salt = bcrypt.genSaltSync(15);
         const hashedPassword = await bcrypt.hash(dto.password, salt);
@@ -89,6 +107,8 @@ export class AuthUserService {
 
         const context = await this.authService.resolveContext(userDetails.id);
         const { gateToken, vaultToken } = await this.createSession(userDetails, context, ip, ua);
+
+        await this.trackUserDevice(userDetails.id, ua, ip);
         await this.auditService.log({ userId: userDetails.id, organizationId: context.organisation?.id ?? null, action: 'login', description: 'User logged in successfully', ipAddress: ip, userAgent: ua, });
 
         Logger.log(`User logged in successfully`, `USER:${userDetails.id} IP:${ip}`);
@@ -112,6 +132,7 @@ export class AuthUserService {
 
         const { gateToken, vaultToken } = await this.createSession(user, ip, ua);
 
+        await this.trackUserDevice(user.id, ua, ip);
         await this.auditService.log({ userId: user.id, action: 'register', description: 'User registered and logged in', ipAddress: ip, userAgent: ua });
         return { user: { id: user.id, email: user.email }, gateToken, vaultToken };
     }

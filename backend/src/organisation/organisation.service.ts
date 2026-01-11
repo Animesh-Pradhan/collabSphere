@@ -232,10 +232,7 @@ export class OrganisationService {
         data: { status: "ACCEPTED", acceptedAt: new Date() }
       })
 
-      await tx.user.update({
-        where: { id: userId },
-        data: { lastActiveOrganisationId: inviteData.organisationId },
-      });
+      await tx.user.update({ where: { id: userId }, data: { lastActiveOrganisationId: inviteData.organisationId } });
     })
 
     const context = await this.authService.resolveContext(userId);

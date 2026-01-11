@@ -14,6 +14,7 @@ export interface GatePayload {
     };
 }
 
+const DEVICE_ACTIVITY_WINDOW_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -141,5 +142,20 @@ export class AuthService {
         });
     }
 
+    async updateUserDeviceActivity(userId: string, userAgent?: string, ipAddress?: string) {
+        if (!userAgent) return;
+        const device = await this.prisma.userDevice.findFirst({ where: { userId, userAgent } });
+        if (!device) return;
+
+        const now = Date.now();
+        const last = device.lastActive.getTime();
+
+        if (now - last < DEVICE_ACTIVITY_WINDOW_MS) return;
+
+        await this.prisma.userDevice.update({
+            where: { id: device.id },
+            data: { lastActive: new Date(), ipAddress }
+        });
+    }
 }
 

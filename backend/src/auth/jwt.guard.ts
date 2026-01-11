@@ -36,7 +36,6 @@ export class JwtGuard extends AuthGuard('jwt') {
             throw new UnauthorizedException('Session expired');
         }
 
-        req.user.gateToken = gateToken;
         req.session = session;
         req.gateToken = gateToken;
         return true;
