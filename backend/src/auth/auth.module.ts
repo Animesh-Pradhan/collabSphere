@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
@@ -10,7 +10,9 @@ import { AuthAdminController } from './admin/auth-admin.controller';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { MailModule } from 'src/mail/mail.module';
+import { WorkspaceMemberBridgeService } from 'src/workspace/workspace-member-bridge.service';
 
+@Global()
 @Module({
     imports: [
         PassportModule,
@@ -25,10 +27,10 @@ import { MailModule } from 'src/mail/mail.module';
             }),
         }),
         PrismaModule,
-        MailModule
+        MailModule,
     ],
     controllers: [AuthUserController, AuthAdminController],
-    providers: [AuthService, AuthUserService, UserService, JwtStrategy],
+    providers: [AuthService, AuthUserService, UserService, JwtStrategy, WorkspaceMemberBridgeService],
     exports: [AuthService, JwtModule, AuthUserService],
 })
 export class AuthModule { }

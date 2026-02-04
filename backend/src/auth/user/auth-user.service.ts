@@ -6,6 +6,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { UserService } from 'src/user/user.service';
 import { AuthService } from '../auth.service';
 import { AuditService } from 'src/common/audit/audit.service';
+import { WorkspaceMemberBridgeService } from 'src/workspace/workspace-member-bridge.service';
 
 
 const MAX_FAILED_ATTEMPTS = 3;
@@ -13,7 +14,7 @@ const LOCK_DURATION_MINUTES = 30;
 
 @Injectable()
 export class AuthUserService {
-    constructor(private prisma: PrismaService, private userService: UserService, private authService: AuthService, private auditService: AuditService) { }
+    constructor(private prisma: PrismaService, private userService: UserService, private authService: AuthService, private auditService: AuditService, private readonly workspaceMemberBridgeService: WorkspaceMemberBridgeService) { }
 
     private async createSession(user: any, context: any, ip?: string, ua?: string) {
         const payload = {
@@ -74,8 +75,6 @@ export class AuthUserService {
 
     async login(dto: LoginUserDto, ip?: string, ua?: string) {
         const userDetails = await this.userService.findByEmail(dto.email);
-        console.log(JSON.stringify(userDetails, null, 2));
-
         if (!userDetails) throw new UnauthorizedException('Invalid Credentials')
         if (!userDetails.password) throw new UnauthorizedException('Your Password is not set yet!')
         if (userDetails.lockedUntil && userDetails.lockedUntil > new Date()) {
@@ -130,10 +129,13 @@ export class AuthUserService {
             }
         })
 
+        await this.workspaceMemberBridgeService.activatePendingWorkspaceInvites(user.id, user.email);
+
         const { gateToken, vaultToken } = await this.createSession(user, ip, ua);
 
         await this.trackUserDevice(user.id, ua, ip);
         await this.auditService.log({ userId: user.id, action: 'register', description: 'User registered and logged in', ipAddress: ip, userAgent: ua });
+        await this.workspaceMemberBridgeService.activatePendingWorkspaceInvites(user.id, user.email);
         return { user: { id: user.id, email: user.email }, gateToken, vaultToken };
     }
 }

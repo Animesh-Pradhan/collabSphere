@@ -48,7 +48,7 @@ export class AuthService {
     }
 
     async signGateToken(payload: GatePayload): Promise<string> {
-        return await this.jwtService.signAsync(payload);
+        return await this.jwtService.signAsync(payload, { expiresIn: '1d' });
     }
 
     async verifyGateToken(token: string): Promise<GatePayload> {

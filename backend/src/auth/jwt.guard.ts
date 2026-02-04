@@ -28,15 +28,15 @@ export class JwtGuard extends AuthGuard('jwt') {
             throw new UnauthorizedException('Missing gate token');
         }
 
-        const session = await this.authService.findSessionByGateToken(gateToken);
-        if (!session) throw new UnauthorizedException('Session not found');
+        // const session = await this.authService.findSessionByGateToken(gateToken);
+        // if (!session) throw new UnauthorizedException('Session not found');
 
-        if (session.expiresAt && new Date() > session.expiresAt) {
-            await this.authService.deleteSessionByGateToken(gateToken);
-            throw new UnauthorizedException('Session expired');
-        }
+        // if (session.expiresAt && (new Date() > session.expiresAt)) {
+        //     await this.authService.deleteSessionByGateToken(gateToken);
+        //     throw new UnauthorizedException('Session expired');
+        // }
 
-        req.session = session;
+        // req.session = session;
         req.gateToken = gateToken;
         return true;
     }

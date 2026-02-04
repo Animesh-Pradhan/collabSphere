@@ -9,7 +9,7 @@ export class RolesGuard implements CanActivate {
     }
 
     canActivate(context: ExecutionContext) {
-        const requiredRoles = this.reflector.get<string[]>(ROLES_KEY, context.getHandler());
+        const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [context.getHandler(), context.getClass()]);
         if (!requiredRoles || requiredRoles.length === 0) {
             return true;
         }
@@ -17,20 +17,13 @@ export class RolesGuard implements CanActivate {
         const req = context.switchToHttp().getRequest();
         const user = req.user;
 
-        if (!user) {
+        if (!user || !user.role) {
             throw new ForbiddenException('User not authenticated');
         }
 
-        const userRole = user.role || [];
-        const rolesArray = Array.isArray(userRole) ? userRole : [userRole];
-
-        for (let i = 0; i < requiredRoles.length; i++) {
-            const r = requiredRoles[i];
-            if (rolesArray.indexOf(r) !== -1) {
-                return true;
-            }
+        if (!requiredRoles.includes(user.role as string)) {
+            throw new ForbiddenException('Insufficient role privileges');
         }
-
-        throw new ForbiddenException('Insufficient role privileges');
+        return true;
     }
 }

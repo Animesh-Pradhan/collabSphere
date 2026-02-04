@@ -12,6 +12,7 @@ import { SessionInterceptor } from './auth/session.interceptor';
 import { OrganisationModule } from './organisation/organisation.module';
 import { UploadModule } from './common/upload/upload.module';
 import { AuditModule } from './common/audit/audit.module';
+import { WorkspaceModule } from './workspace/workspace.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { AuditModule } from './common/audit/audit.module';
     MyLoggerModule,
     OrganisationModule,
     UploadModule,
-    AuditModule
+    AuditModule,
+    WorkspaceModule
   ],
   controllers: [AppController],
   providers: [AppService, SessionInterceptor, {
