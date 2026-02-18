@@ -11,5 +11,10 @@ declare module 'express' {
             gateToken?: string;
             vaultToken?: string;
         };
+
+        workspaceMember?: {
+            id: string;
+            role: string;
+        };
     }
 }

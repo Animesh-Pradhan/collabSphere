@@ -341,7 +341,7 @@ model Document {
   deletedAt      DateTime?
 
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  lockedMember     WorkspaceMember?  @relation(fields: [lockedBy], references: [id])
+  lockedMember     WorkspaceMember?  @relation(fields: [lockedBy], references: [id], onDelete: SetNull)
   documentVersions DocumentVersion[]
   documentComments DocumentComment[]
 

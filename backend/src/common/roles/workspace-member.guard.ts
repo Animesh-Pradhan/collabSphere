@@ -24,10 +24,13 @@ export class WorkspaceMemberGuard implements CanActivate {
         });
         if (isOwner) return true;
 
-        const isMember = await this.prisma.workspaceMember.findFirst({
+        const member = await this.prisma.workspaceMember.findFirst({
             where: { workspaceId, userId: user.sub, status: 'ACTIVE', removedAt: null },
-            select: { id: true },
+            select: { id: true, role: true },
         });
-        return !!isMember;
+        if (!member) return false;
+
+        request.workspaceMember = member;
+        return true;
     }
 }

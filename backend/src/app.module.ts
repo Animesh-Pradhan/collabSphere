@@ -13,6 +13,7 @@ import { OrganisationModule } from './organisation/organisation.module';
 import { UploadModule } from './common/upload/upload.module';
 import { AuditModule } from './common/audit/audit.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { DocumentModule } from './document/document.module';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { WorkspaceModule } from './workspace/workspace.module';
     OrganisationModule,
     UploadModule,
     AuditModule,
-    WorkspaceModule
+    WorkspaceModule,
+    DocumentModule
   ],
   controllers: [AppController],
   providers: [AppService, SessionInterceptor, {
