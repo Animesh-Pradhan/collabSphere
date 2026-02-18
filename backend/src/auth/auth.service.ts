@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -156,6 +156,56 @@ export class AuthService {
             where: { id: device.id },
             data: { lastActive: new Date(), ipAddress }
         });
+    }
+
+    async switchWorkspace(vaultToken: string, orgId?: string) {
+        const session = await this.findSessionByVaultToken(vaultToken);
+        if (!session) throw new UnauthorizedException('Invalid session');
+
+        if (new Date() > session.expiresAt) {
+            await this.deleteSessionByVaultToken(vaultToken);
+            throw new UnauthorizedException('Session expired');
+        }
+
+        const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
+        if (!user) throw new UnauthorizedException('User not found');
+
+        let context;
+        if (!orgId) {
+            context = { mode: 'personal', organisation: null };
+        } else {
+            const membership = await this.prisma.organisationMember.findFirst({
+                where: { organisationId: orgId, userId: user.id, status: 'ACTIVE' },
+                include: { organisation: true }
+            });
+            if (!membership) {
+                throw new ForbiddenException('Not part of this organisation');
+            }
+
+            context = {
+                mode: 'org',
+                organisation: { id: membership.organisationId, role: membership.role, name: membership.organisation.name }
+            };
+        }
+
+        const payload: GatePayload = {
+            sub: user.id,
+            email: user.email,
+            role: "USER",
+            ctx: {
+                mode: context.mode,
+                orgId: context.organisation?.id ?? null,
+                orgRole: context.organisation?.role ?? null,
+            }
+        };
+
+        const newGateToken = await this.signGateToken(payload);
+        await this.prisma.userSession.update({
+            where: { id: session.id },
+            data: { gateToken: newGateToken }
+        });
+
+        return { gateToken: newGateToken, context };
     }
 }
 

@@ -1,10 +1,13 @@
 import bcrypt from "bcrypt";
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { MailService } from 'src/mail/mail.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { generateOtp, hashOtp, verifyOtp } from 'src/utils/helper';
+
 import { AuditService } from "src/common/audit/audit.service";
 import { AuthService } from "src/auth/auth.service";
+import { buildDateRangeCondition, buildSearchCondition, executePaginatedQuery } from "src/utils/query.helper";
+import { GetOrgUsersQueryDto } from "./dto/user-helper";
 
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
@@ -120,5 +123,40 @@ export class UserService {
 
         // await this.sessionService.revokeAllSessions(userId);
         // await this.audit.log(userId, 'password_changed', {});
+    }
+
+    async findUsersByOrg(orgId: string, reqId: string, query: GetOrgUsersQueryDto) {
+        const membership = await this.prisma.organisationMember.findFirst({
+            where: { organisationId: orgId, userId: reqId },
+            select: { id: true, role: true }
+        });
+
+        if (!membership) {
+            throw new ForbiddenException('Not part of this organisation');
+        }
+        const allowedRoles = ['OWNER', 'ADMIN', 'MANAGER'];
+
+        if (!allowedRoles.includes(membership.role)) {
+            throw new ForbiddenException('Insufficient permissions');
+        }
+
+        const where: any = {
+            membership: {
+                some: {
+                    organisationId: orgId,
+                    ...(query.role && { role: query.role }),
+                    ...(query.status && { status: query.status }),
+                    ...buildDateRangeCondition(query.fromDate, query.toDate, 'joinedAt')
+                }
+            },
+            ...buildSearchCondition(query.search, ['firstName', 'lastName', 'email'])
+        };
+
+        return executePaginatedQuery(
+            this.prisma.user,
+            where, query,
+            ['createdAt', 'firstName', 'email'],
+            'joinedAt'
+        );
     }
 }

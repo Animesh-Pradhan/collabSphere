@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import { Body, Controller, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { AuthUserService } from './auth-user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -5,6 +6,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from '../auth.service';
+import { SwitchOrganisationDto } from './dto/helper.dto';
 
 @ApiTags('Auth - User')
 @Controller('auth/user')
@@ -114,5 +116,19 @@ export class AuthUserController {
         });
 
         return { message: 'Logged out' };
+    }
+
+    @ApiOperation({ summary: 'Switch Organisation', description: 'Switch organisation context for the logged in user.' })
+    @Post('switch-organisation')
+    async switchOrganisation(@Body() dto: SwitchOrganisationDto, @Req() req: Request) {
+        const vaultToken: string = req.cookies[process.env.VAULT_COOKIE_NAME || 'vaultToken'];
+        if (!vaultToken) throw new UnauthorizedException('No vault token');
+
+        const result = await this.authService.switchWorkspace(vaultToken, dto.orgId);
+
+        return {
+            message: 'Organisation switched successfully',
+            data: { gateToken: result.gateToken, context: result.context }
+        };
     }
 }

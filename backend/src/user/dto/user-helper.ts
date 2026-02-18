@@ -1,5 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsString, Length, MaxLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsEnum, IsOptional, IsString, Length, MaxLength } from "class-validator";
+import { MemberStatus, Role } from "generated/prisma/enums";
+import { BaseQueryDto } from "src/common/dto/base-query.dto";
 
 export class RequestEmailChangeDto {
     @ApiProperty({ example: "dr.illuminati.06@gmail.com", description: 'User Email' })
@@ -29,3 +31,17 @@ export class VerifyEmailOtpDto {
     @Length(4, 8)
     otp: string;
 }
+
+
+export class GetOrgUsersQueryDto extends BaseQueryDto {
+    @ApiPropertyOptional({ description: 'Filter by organisation role', enum: Role, example: Role.ADMIN })
+    @IsOptional()
+    @IsEnum(Role)
+    role?: Role;
+
+    @ApiPropertyOptional({ description: 'Filter by user status', enum: MemberStatus, example: MemberStatus.ACTIVE })
+    @IsOptional()
+    @IsEnum(MemberStatus)
+    status?: MemberStatus;
+}
+

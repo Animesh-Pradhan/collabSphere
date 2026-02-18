@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Put, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import { BadRequestException, Body, Controller, Get, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { UserService } from './user.service';
@@ -9,7 +10,7 @@ import { Role } from 'src/common/roles/roles.enum';
 import { plainToInstance } from 'class-transformer';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ChangePasswordDto, RequestEmailChangeDto, VerifyEmailOtpDto } from './dto/user-helper';
+import { ChangePasswordDto, GetOrgUsersQueryDto, RequestEmailChangeDto, VerifyEmailOtpDto } from './dto/user-helper';
 
 @ApiTags('User')
 @Controller('user')
@@ -64,6 +65,26 @@ export class UserController {
         const ua: string = req.headers['user-agent'] || '';
         await this.userService.changePassword(req.user.sub as string, dto.currentPassword, dto.newPassword, ip, ua);
         return { message: 'Password changed successfully' };
+    }
+
+
+    @Roles(Role.SUPER_ADMIN, Role.USER)
+    @ApiOperation({ summary: 'Get All Organisation User', description: 'Returns all users inside a organisation.' })
+    @Get('/org-users')
+    async findUsersByOrg(@Req() req: Request, @Query() query: GetOrgUsersQueryDto) {
+        const organisationId = req.user?.ctx.orgId;
+        const userId = req.user?.sub;
+
+        console.log(req.user);
+
+
+        if (!organisationId) {
+            throw new BadRequestException('Organization context required | (Valid for Organisation user only)');
+        }
+
+        const data = await this.userService.findUsersByOrg(organisationId, userId, query);
+
+        return { message: "User data fetched Succesfully", data: plainToInstance(UserResponseDto, data.data), meta: data.meta }
     }
 
 
