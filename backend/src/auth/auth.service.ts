@@ -24,7 +24,7 @@ export class AuthService {
         const memberships = await this.prisma.organisationMember.findMany({
             where: { userId, status: 'ACTIVE' },
             orderBy: { joinedAt: 'asc', },
-            select: { organisationId: true, role: true },
+            select: { organisationId: true, role: true, organisation: { select: { name: true } } },
         });
 
         if (memberships.length === 0) {
@@ -44,7 +44,7 @@ export class AuthService {
             });
         }
 
-        return { mode: 'ORG', organisation: { id: activeMembership.organisationId, role: activeMembership.role } };
+        return { mode: 'ORG', organisation: { id: activeMembership.organisationId, name: activeMembership.organisation.name, role: activeMembership.role } };
     }
 
     async signGateToken(payload: GatePayload): Promise<string> {

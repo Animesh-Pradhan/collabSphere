@@ -15,7 +15,7 @@ async function bootstrap() {
   const { httpAdapter } = app.get(HttpAdapterHost);
 
   app.use(cookieParser());
-  app.enableCors({ origin: 'http://localhost:3000', credentials: true });
+  app.enableCors({ origin: ['http://localhost:3000', 'http://localhost:4000'], credentials: true });
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,

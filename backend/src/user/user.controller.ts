@@ -75,16 +75,18 @@ export class UserController {
         const organisationId = req.user?.ctx.orgId;
         const userId = req.user?.sub;
 
-        console.log(req.user);
-
-
         if (!organisationId) {
             throw new BadRequestException('Organization context required | (Valid for Organisation user only)');
         }
 
         const data = await this.userService.findUsersByOrg(organisationId, userId, query);
 
-        return { message: "User data fetched Succesfully", data: plainToInstance(UserResponseDto, data.data), meta: data.meta }
+        return {
+            message: "User data fetched Succesfully", data: {
+                members: plainToInstance(UserResponseDto, data.data),
+                meta: data.meta
+            }
+        }
     }
 
 
