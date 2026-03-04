@@ -1,10 +1,11 @@
-import { Provider } from "@/components/ui/provider";
+import Providers from "./provider";
+import "./globals.css";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" suppressHydrationWarning>
             <body>
-                <Provider defaultTheme="light">{children}</Provider>
+                <Providers>{children}</Providers>
             </body>
         </html>
     );
