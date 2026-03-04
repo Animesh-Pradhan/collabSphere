@@ -102,6 +102,28 @@ export class DocumentController {
     const data = await this.documentService.restore(workspaceId, workspaceMemberId!, documentId);
     return { message: "Document restored to draft successfully.", data };
   }
+
+  @ApiOperation({ summary: "Get Document Version History", description: "Returns all versions of a document (metadata only)." })
+  @Get(':documentId/versions')
+  async getVersions(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string) {
+    const data = await this.documentService.getVersions(workspaceId, documentId);
+    return { message: "Document versions fetched successfully.", data }
+  }
+
+  @ApiOperation({ summary: "Get Document Version History", description: "Returns all versions of a document (metadata only)." })
+  @Get(':documentId/versions')
+  async getVersionByNumber(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Param('version') version: string) {
+    const data = await this.documentService.getVersionByNumber(workspaceId, documentId, parseInt(version));
+    return { message: "Document versions fetched successfully.", data }
+  }
+
+  @ApiOperation({ summary: "Rollback Document Version", description: "Creates a new version using content from a previous version." })
+  @Post(':documentId/versions/:version/rollback')
+  async rollback(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Param('version') version: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember!.id;
+    const data = await this.documentService.rollbackToVersion(workspaceId, workspaceMemberId, documentId, Number(version));
+    return { message: "Document rolled back successfully.", data };
+  }
 }
 
 

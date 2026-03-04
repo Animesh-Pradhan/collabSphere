@@ -8,7 +8,7 @@ import { RolesGuard } from 'src/common/roles/roles.guard';
 import { Roles } from 'src/common/roles/roles.decorator';
 import { Role } from 'src/common/roles/roles.enum';
 import { plainToInstance } from 'class-transformer';
-import { UserResponseDto } from './dto/user-response.dto';
+import { UserInsideMembershipDto, UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto, GetOrgUsersQueryDto, RequestEmailChangeDto, VerifyEmailOtpDto } from './dto/user-helper';
 
@@ -16,7 +16,7 @@ import { ChangePasswordDto, GetOrgUsersQueryDto, RequestEmailChangeDto, VerifyEm
 @Controller('user')
 @UseGuards(JwtGuard, RolesGuard)
 @Roles(Role.USER)
-@Throttle({ auth: {} })
+@Throttle({ long: {} })
 
 export class UserController {
     constructor(private userService: UserService) { }
@@ -25,7 +25,7 @@ export class UserController {
     @Get('detail')
     async findById(@Req() req: any) {
         const user = await this.userService.findById(req.user.sub as string);
-        return { message: "User data fetched Succesfully", data: plainToInstance(UserResponseDto, user) }
+        return { message: "User data fetched Succesfully", data: plainToInstance(UserInsideMembershipDto, user) }
     }
 
     @ApiOperation({ summary: 'Update User Details', description: 'Returns logged-in user profile using access token' })

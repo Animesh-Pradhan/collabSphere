@@ -258,11 +258,12 @@ model Workspace {
   deletedAt      DateTime?
   archivedAt     DateTime?
 
-  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  organisation     Organisation?     @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  workspaceMembers WorkspaceMember[]
-  documents        Document[]
-  tasks            Task[]
+  owner              User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organisation       Organisation?      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  workspaceMembers   WorkspaceMember[]
+  documents          Document[]
+  tasks              Task[]
+  documentActivities DocumentActivity[]
 
   @@unique([organisationId, slug])
   @@unique([organisationId, isDefault])
@@ -305,9 +306,11 @@ model WorkspaceMember {
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
-  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  documents Document[]
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user               User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents          Document[]
+  documentComments   DocumentComment[]
+  documentActivities DocumentActivity[]
 
   @@unique([workspaceId, userId])
   @@index([workspaceId])
@@ -340,10 +343,11 @@ model Document {
   publishedAt    DateTime?
   deletedAt      DateTime?
 
-  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  lockedMember     WorkspaceMember?  @relation(fields: [lockedBy], references: [id], onDelete: SetNull)
-  documentVersions DocumentVersion[]
-  documentComments DocumentComment[]
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lockedMember       WorkspaceMember?   @relation(fields: [lockedBy], references: [id], onDelete: SetNull)
+  documentVersions   DocumentVersion[]
+  documentComments   DocumentComment[]
+  documentActivities DocumentActivity[]
 
   @@index([workspaceId])
   @@index([status])
@@ -358,23 +362,75 @@ model DocumentVersion {
   createdBy  String
   createdAt  DateTime @default(now())
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document           Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentComments   DocumentComment[]
+  documentActivities DocumentActivity[]
 
   @@unique([documentId, version])
   @@index([documentId])
 }
 
 model DocumentComment {
-  id         String    @id @default(cuid())
-  documentId String
-  userId     String
-  comment    String
-  parentId   String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  id                String    @id @default(cuid())
+  documentId        String
+  documentVersionId String
+  workspaceMemberId String
+  comment           String
+  blockId           String?
+  parentId          String?
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id])
+
+  parent             DocumentComment?   @relation("CommentThread", fields: [parentId], references: [id])
+  replies            DocumentComment[]  @relation("CommentThread")
+  documentActivities DocumentActivity[]
+
+  @@index([documentId])
+  @@index([workspaceMemberId])
+  @@index([parentId])
+}
+
+enum DocumentActivityType {
+  DOCUMENT_CREATED
+  DOCUMENT_UPDATED
+  DOCUMENT_ROLLED_BACK
+  DOCUMENT_PUBLISHED
+  DOCUMENT_ARCHIVED
+
+  COMMENT_CREATED
+  COMMENT_RESOLVED
+  COMMENT_DELETED
+}
+
+model DocumentActivity {
+  id                String               @id @default(cuid())
+  workspaceId       String
+  documentId        String
+  documentVersionId String?
+  workspaceMemberId String
+  commentId         String?
+  type              DocumentActivityType
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: SetNull)
+  workspaceMember WorkspaceMember  @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+  comment         DocumentComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([documentId])
+  @@index([documentVersionId])
+  @@index([workspaceMemberId])
+  @@index([commentId])
+  @@index([createdAt])
 }
 
 enum TaskPriority {

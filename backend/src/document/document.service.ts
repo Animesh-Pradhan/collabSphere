@@ -1,11 +1,13 @@
+import { Prisma } from 'generated/prisma/client';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { DocumentActivityService } from './document-activity.service';
 
 @Injectable()
 export class DocumentService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService, private readonly documentActivity: DocumentActivityService) { }
 
   async create(workspaceId: string, workspaceMemberId: string, createDocumentDto: CreateDocumentDto) {
     return this.prisma.$transaction(async (tx) => {
@@ -36,7 +38,7 @@ export class DocumentService {
           createdBy: workspaceMemberId,
         }
       });
-
+      await this.documentActivity.log(tx, { workspaceId, workspaceMemberId, documentId: document.id, type: "DOCUMENT_CREATED", documentVersionId: undefined, metadata: { version: 1, title: document.title } })
       return document;
     });
   }
@@ -51,16 +53,15 @@ export class DocumentService {
   async findOne(workspaceId: string, documentId: string) {
     const document = await this.prisma.document.findFirst({
       where: { id: documentId, workspaceId, deletedAt: null },
-      include: {
-        documentVersions: {
-          where: { version: { equals: undefined } }
-        }
-      }
     });
 
     if (!document) throw new NotFoundException("Document not found.");
 
-    return document;
+    const version = await this.prisma.documentVersion.findFirst({
+      where: { documentId, version: document.currentVersion }
+    });
+
+    return { ...document, content: version?.content };
   }
 
   async update(workspaceId: string, workspaceMemberId: string, documentId: string, updateDocumentDto: UpdateDocumentDto) {
@@ -88,7 +89,7 @@ export class DocumentService {
 
       const nextVersion = document.currentVersion + 1;
 
-      await tx.documentVersion.create({
+      const newVersion = await tx.documentVersion.create({
         data: {
           documentId,
           version: nextVersion,
@@ -96,7 +97,6 @@ export class DocumentService {
           createdBy: workspaceMemberId
         }
       })
-
       const updatedDocument = await tx.document.update({
         where: { id: documentId },
         data: {
@@ -106,7 +106,10 @@ export class DocumentService {
           updatedBy: workspaceMemberId
         }
       })
-
+      await this.documentActivity.log(tx, {
+        workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_UPDATED", documentVersionId: newVersion.id,
+        metadata: { version: nextVersion, titleChanged: updateDocumentDto.title !== undefined, descriptionChanged: updateDocumentDto.description !== undefined }
+      });
       return updatedDocument;
     });
   }
@@ -160,14 +163,15 @@ export class DocumentService {
         throw new ConflictException("Document is already locked by another member");
       }
 
-      return await tx.document.update({
+      const updated = await tx.document.update({
         where: { id: documentId },
         data: {
           lockedBy: workspaceMemberId,
           lockedAt: new Date(),
         },
       });
-
+      await this.documentActivity.log(tx, { workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_UPDATED", metadata: { action: "LOCKED" } });
+      return updated;
     })
   }
 
@@ -190,13 +194,15 @@ export class DocumentService {
         throw new ForbiddenException("You cannot unlock this document");
       }
 
-      return await tx.document.update({
+      const updated = await tx.document.update({
         where: { id: documentId },
         data: {
           lockedBy: null,
           lockedAt: null,
         },
       });
+      await this.documentActivity.log(tx, { workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_UPDATED", metadata: { action: "UNLOCKED" } });
+      return updated;
     })
   }
 
@@ -218,10 +224,12 @@ export class DocumentService {
       if (document.status === "ARCHIVED") throw new ConflictException("Archived document cannot be published");
       if (document.status === "PUBLISHED") throw new ConflictException("Document already published");
 
-      return tx.document.update({
+      const updated = await tx.document.update({
         where: { id: documentId },
         data: { status: "PUBLISHED", publishedAt: new Date(), updatedBy: workspaceMemberId }
       })
+      await this.documentActivity.log(tx, { workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_PUBLISHED" });
+      return updated;
     });
   }
 
@@ -242,10 +250,12 @@ export class DocumentService {
       if (!document) throw new NotFoundException("Document not found");
       if (document.status === "ARCHIVED") throw new ConflictException("Document already archived");
 
-      return await tx.document.update({
+      const updated = await tx.document.update({
         where: { id: documentId },
         data: { status: "ARCHIVED", updatedBy: workspaceMemberId },
       });
+      await this.documentActivity.log(tx, { workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_ARCHIVED" });
+      return updated;
     });
   }
 
@@ -266,10 +276,80 @@ export class DocumentService {
       if (!document) throw new NotFoundException("Document not found");
       if (document.status !== "ARCHIVED") throw new ConflictException("Only archived documents can be restored");
 
-      return await tx.document.update({
+      const updated = await tx.document.update({
         where: { id: documentId },
         data: { status: "DRAFT", updatedBy: workspaceMemberId },
       });
+      await this.documentActivity.log(tx, { workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_UPDATED", metadata: { action: "RESTORED" } });
+      return updated;
     });
+  }
+
+  async getVersions(workspaceId: string, documentId: string) {
+    const document = await this.prisma.document.findFirst({
+      where: { id: documentId, workspaceId, deletedAt: null },
+      select: { id: true }
+    })
+
+    if (!document) throw new NotFoundException("Document not found");
+
+    return this.prisma.documentVersion.findMany({
+      where: { documentId: documentId },
+      select: { version: true, createdAt: true, createdBy: true, id: true },
+      orderBy: { version: 'desc' }
+    })
+  }
+
+  async getVersionByNumber(workspaceId: string, documentId: string, version: number) {
+    const document = await this.prisma.document.findFirst({
+      where: { id: documentId, workspaceId, deletedAt: null },
+      select: { id: true }
+    })
+    if (!document) throw new NotFoundException("Document not found");
+
+    const versionData = await this.prisma.documentVersion.findFirst({
+      where: { documentId: documentId, version }
+    })
+    if (!versionData) throw new NotFoundException("Document version not found");
+    return versionData;
+  }
+
+  async rollbackToVersion(workspaceId: string, workspaceMemberId: string, documentId: string, versionNumber: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const member = await tx.workspaceMember.findFirst({
+        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
+        select: { role: true }
+      })
+
+      if (!member) throw new ForbiddenException("You are not an active member");
+      if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to rollback document");
+
+      const document = await tx.document.findFirst({ where: { id: documentId, workspaceId, deletedAt: null } });
+      if (!document) throw new NotFoundException("Document not found");
+      if (document.status === "ARCHIVED") throw new ConflictException("Archived document cannot be rollback");
+      if (document.lockedBy && document.lockedBy !== workspaceMemberId) throw new ConflictException("Document is already locked by another member");
+
+      const targetVersion = await tx.documentVersion.findFirst({
+        where: { documentId, version: versionNumber },
+      });
+      if (!targetVersion) throw new NotFoundException("Target version not found");
+      if (versionNumber === document.currentVersion) throw new ConflictException("Cannot rollback to the current version");
+      if (versionNumber > document.currentVersion) throw new ConflictException("Invalid version number");
+
+      const nextVersion = document.currentVersion + 1;
+      const newVersion = await tx.documentVersion.create({
+        data: { documentId, version: nextVersion, content: targetVersion.content as Prisma.InputJsonValue, createdBy: workspaceMemberId }
+      })
+
+      const updated = tx.document.update({
+        where: { id: documentId },
+        data: { currentVersion: nextVersion, updatedBy: workspaceMemberId },
+      });
+      await this.documentActivity.log(tx, {
+        workspaceId, documentId, workspaceMemberId, type: "DOCUMENT_ROLLED_BACK", documentVersionId: newVersion.id,
+        metadata: { fromVersion: document.currentVersion, toVersion: versionNumber, newVersion: nextVersion }
+      });
+      return updated;
+    })
   }
 }

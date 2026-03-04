@@ -1,12 +1,20 @@
 export function buildSortCondition(
-    sortBy: string | undefined,
-    order: 'asc' | 'desc' | undefined,
-    allowedFields: string[],
+    sortBy: string,
+    order: 'asc' | 'desc',
+    allowedFields: Set<string> | string[],
     defaultField: string = 'createdAt'
 ) {
-    const field = allowedFields.includes(sortBy || '') ? sortBy : defaultField;
+    const direction = order === 'asc' ? 'asc' : 'desc';
 
-    return { [field!]: order || 'desc' };
+    const isAllowed =
+        allowedFields instanceof Set
+            ? allowedFields.has(sortBy)
+            : allowedFields.includes(sortBy);
+
+    const field = isAllowed ? sortBy : defaultField;
+
+    return { [field]: direction };
+
 }
 
 export function buildSearchCondition(search: string | undefined, fields: string[]) {
@@ -30,26 +38,37 @@ export function buildDateRangeCondition(fromDate: string | undefined, toDate: st
     };
 }
 
-
-export async function executePaginatedQuery(
-    model: any,
-    where: any,
-    query: { page: number; limit: number; sortBy?: string; order?: 'asc' | 'desc' },
-    allowedSortFields: string[],
-    defaultSortField: string = 'createdAt'
-) {
-    const { page, limit, sortBy, order } = query;
+export async function executePaginatedQuery({
+    model,
+    prismaQuery,
+    page,
+    limit
+}: {
+    model: any;
+    prismaQuery: any;
+    page: number;
+    limit: number;
+}) {
     const skip = (page - 1) * limit;
 
-    const sortCondition = buildSortCondition(sortBy, order, allowedSortFields, defaultSortField);
-
     const [data, total] = await Promise.all([
-        model.findMany({ where, orderBy: sortCondition, skip, take: limit }),
-        model.count({ where })
+        model.findMany({
+            ...prismaQuery,
+            skip,
+            take: limit
+        }),
+        model.count({
+            where: prismaQuery.where
+        })
     ]);
 
     return {
         data,
-        meta: { totalItems: total, page, limit, totalPages: Math.ceil(total / limit) }
+        meta: {
+            totalItems: total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        }
     };
 }

@@ -1,7 +1,8 @@
-import { Exclude, Expose } from 'class-transformer';
+import { Exclude, Expose, Type } from 'class-transformer';
 
 @Exclude()
-export class UserResponseDto {
+export class UserInsideMembershipDto {
+
     @Expose()
     id: string;
 
@@ -49,4 +50,23 @@ export class UserResponseDto {
 
     @Expose()
     updatedAt: Date;
+}
+
+@Exclude()
+export class UserResponseDto {
+    @Expose()
+    id: string;
+
+    @Expose()
+    role: string;
+
+    @Expose()
+    status: string;
+
+    @Expose()
+    joinedAt: Date;
+
+    @Expose()
+    @Type(() => UserInsideMembershipDto)
+    user: UserInsideMembershipDto;
 }

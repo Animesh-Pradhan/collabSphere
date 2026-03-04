@@ -6,7 +6,7 @@ import { generateOtp, hashOtp, verifyOtp } from 'src/utils/helper';
 
 import { AuditService } from "src/common/audit/audit.service";
 import { AuthService } from "src/auth/auth.service";
-import { buildDateRangeCondition, buildSearchCondition, executePaginatedQuery } from "src/utils/query.helper";
+import { buildDateRangeCondition, buildSearchCondition, buildSortCondition, executePaginatedQuery } from "src/utils/query.helper";
 import { GetOrgUsersQueryDto } from "./dto/user-helper";
 
 const OTP_EXPIRY_MINUTES = 10;
@@ -140,23 +140,88 @@ export class UserService {
             throw new ForbiddenException('Insufficient permissions');
         }
 
+        let orderBy: any = {};
+        const sortOrder = query.order || 'desc';
+
+        const MEMBERSHIP_SORT_FIELDS = new Set(['joinedAt', 'lastActiveAt', 'role', 'status']);
+        const USER_SORT_FIELDS = new Set(['createdAt', 'firstName', 'lastName', 'email', 'lastLoginAt']);
+
+        if (MEMBERSHIP_SORT_FIELDS.has(query.sortBy)) {
+            orderBy = buildSortCondition(query.sortBy, sortOrder, MEMBERSHIP_SORT_FIELDS, 'joinedAt');
+        } else {
+            const userSort = buildSortCondition(query.sortBy, sortOrder, USER_SORT_FIELDS, 'createdAt');
+            orderBy = { user: userSort };
+        }
+
+        // 3. Build the Where Clause
         const where: any = {
-            membership: {
-                some: {
-                    organisationId: orgId,
-                    ...(query.role && { role: query.role }),
-                    ...(query.status && { status: query.status }),
-                    ...buildDateRangeCondition(query.fromDate, query.toDate, 'joinedAt')
-                }
-            },
-            ...buildSearchCondition(query.search, ['firstName', 'lastName', 'email'])
+            organisationId: orgId,
+            ...(query.role && { role: query.role }),
+            ...(query.status && { status: query.status }),
+            ...buildDateRangeCondition(query.fromDate, query.toDate, 'joinedAt'),
+            ...(query.search && { user: buildSearchCondition(query.search, ['firstName', 'lastName', 'email']) })
         };
 
-        return executePaginatedQuery(
-            this.prisma.user,
-            where, query,
-            ['createdAt', 'firstName', 'email'],
-            'joinedAt'
-        );
+        return executePaginatedQuery({
+            model: this.prisma.organisationMember,
+            prismaQuery: { where, include: { user: true }, orderBy },
+            page: query.page,
+            limit: query.limit
+        });
+
     }
 }
+
+
+// async findUsersByOrg(orgId: string, reqId: string, query: GetOrgUsersQueryDto) {
+//         const membership = await this.prisma.organisationMember.findFirst({
+//             where: { organisationId: orgId, userId: reqId },
+//             select: { id: true, role: true }
+//         });
+
+//         if (!membership) {
+//             throw new ForbiddenException('Not part of this organisation');
+//         }
+//         const allowedRoles = ['OWNER', 'ADMIN', 'MANAGER'];
+
+//         if (!allowedRoles.includes(membership.role)) {
+//             throw new ForbiddenException('Insufficient permissions');
+//         }
+
+//         let orderBy: any = {};
+//         const sortOrder = query.order || 'desc';
+
+//         if (['joinedAt', 'lastActive', 'role', 'status'].includes(query.sortBy)) {
+//             // These fields exist directly on OrganisationMember
+//             orderBy = { [query.sortBy]: sortOrder };
+//         } else {
+//             // These fields exist on the User relation
+//             // e.g., { user: { email: 'asc' } }
+//             orderBy = { user: { [query.sortBy || 'createdAt']: sortOrder } };
+//         }
+
+//         // 3. Build the Where Clause
+//         const where: any = {
+//             organisationId: orgId,
+//             ...(query.role && { role: query.role }),
+//             ...(query.status && { status: query.status }),
+//             ...buildDateRangeCondition(query.fromDate, query.toDate, 'joinedAt'),
+//             // Filter by user fields (search)
+//             user: buildSearchCondition(query.search, ['firstName', 'lastName', 'email'])
+//         };
+
+//         const prismaQuery = {
+//             where,
+//             include: {
+//                 user: true // This gives you all the User fields (name, email, etc.)
+//             },
+//             orderBy
+//         };
+
+//         return executePaginatedQuery({
+//             model: this.prisma.organisationMember,
+//             prismaQuery,
+//             page: query.page,
+//             limit: query.limit
+//         });
+//     }

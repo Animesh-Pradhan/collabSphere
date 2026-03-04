@@ -42,7 +42,7 @@ next-env.d.ts
 
 #BACKEND GITIGNORE
 /backend/node_modules
-/backend/build 
+/backend/build
 /backend/dist
 
 # Logs
