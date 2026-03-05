@@ -30,4 +30,38 @@ export class DocumentActivityService {
         });
         return activity;
     }
+
+    async getActivities(workspaceId: string, workspaceMemberId: string, documentId: string, page: number = 1, limit: number = 20) {
+        const document = await this.prisma.document.findFirst({
+            where: { id: documentId, workspaceId, deletedAt: null },
+            select: { id: true }
+        });
+        if (!document) throw new Error("Document not found");
+
+        const skip = (page - 1) * limit;
+
+        const [activities, total] = await Promise.all([
+            this.prisma.documentActivity.findMany({
+                where: { workspaceId, documentId },
+                include: {
+                    workspaceMember: {
+                        select: {
+                            id: true, role: true, user: {
+                                select: { id: true, firstName: true, lastName: true, email: true, avatar: true }
+                            }
+                        }
+                    }
+                },
+                orderBy: { createdAt: "desc" },
+                skip,
+                take: limit
+            }),
+
+            this.prisma.documentActivity.count({
+                where: { workspaceId, documentId }
+            })
+        ]);
+
+        return { activities, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    }
 }

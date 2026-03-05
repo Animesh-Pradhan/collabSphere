@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateDocumentCommentDto } from "./dto/create-document-comment.dto";
 import { DocumentActivityService } from "../document-activity.service";
+import { GetDocumentCommentsQueryDto } from "./dto/other-helper.dto";
 
 
 @Injectable()
@@ -168,7 +169,11 @@ export class DocumentCommentService {
         });
     }
 
-    async getComments(documentId: string, workspaceId: string) {
+    async getComments(workspaceId: string, documentId: string, query: GetDocumentCommentsQueryDto) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const skip = (page - 1) * limit;
+
         const document = await this.prisma.document.findFirst({
             where: { id: documentId, workspaceId, deletedAt: null },
             select: { currentVersion: true }
@@ -179,35 +184,52 @@ export class DocumentCommentService {
             where: { documentId, version: document.currentVersion },
             select: { id: true }
         });
-        if (!version) return [];
 
-        return this.prisma.documentComment.findMany({
-            where: { documentId: documentId, documentVersionId: version.id, parentId: null, deletedAt: null },
-            include: {
-                workspaceMember: {
-                    select: {
-                        id: true, role: true, user: {
-                            select: { id: true, firstName: true, lastName: true, email: true, avatar: true }
-                        }
-                    }
-                },
+        if (!version) return { comments: [], meta: { totalItems: 0, page, limit, totalPages: 0 } };
 
-                replies: {
-                    where: { deletedAt: null },
-                    include: {
-                        workspaceMember: {
-                            select: {
-                                id: true, role: true, user: {
-                                    select: { id: true, firstName: true, lastName: true, email: true, avatar: true }
-                                }
+        const where: any = {
+            documentId,
+            documentVersionId: version.id,
+            parentId: null,
+            deletedAt: null,
+            ...(query.resolved === true && { resolvedAt: { not: null } }),
+            ...(query.resolved === false && { resolvedAt: null }),
+            ...(query.blockId && { blockId: query.blockId })
+        };
+
+        const [comments, total] = await Promise.all([
+            this.prisma.documentComment.findMany({
+                where,
+                include: {
+                    workspaceMember: {
+                        select: {
+                            id: true, role: true, user: {
+                                select: { id: true, firstName: true, lastName: true, email: true, avatar: true }
                             }
                         }
                     },
-                    orderBy: { createdAt: "asc" }
-                }
-            },
-            orderBy: { createdAt: "asc" }
-        });
+
+                    replies: {
+                        where: { deletedAt: null },
+                        include: {
+                            workspaceMember: {
+                                select: {
+                                    id: true, role: true, user: {
+                                        select: { id: true, firstName: true, lastName: true, email: true, avatar: true }
+                                    }
+                                }
+                            }
+                        },
+                        orderBy: { createdAt: query.order ?? "asc" },
+                    }
+                },
+                orderBy: { createdAt: query.order ?? "asc" },
+                skip,
+                take: limit
+            }),
+            this.prisma.documentComment.count({ where })
+        ]);
+        return { comments, meta: { totalItems: total, page, limit, totalPages: Math.ceil(total / limit) } };
     }
 
 }

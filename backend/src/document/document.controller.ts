@@ -1,9 +1,9 @@
 import type { Request } from 'express';
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { DocumentService } from './document.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtGuard } from 'src/auth/jwt.guard';
 import { RolesGuard } from 'src/common/roles/roles.guard';
 import { Roles } from 'src/common/roles/roles.decorator';
@@ -12,6 +12,7 @@ import { Throttle } from '@nestjs/throttler';
 import { WorkspaceMemberGuard } from 'src/common/roles/workspace-member.guard';
 import { plainToInstance } from 'class-transformer';
 import { DocumentListItemDto } from './dto/document-list-response.dto';
+import { DocumentActivityService } from './document-activity.service';
 
 
 @ApiTags("Documents - (Workspace)")
@@ -20,7 +21,7 @@ import { DocumentListItemDto } from './dto/document-list-response.dto';
 @Throttle({ long: {} })
 @Controller('workspace/:workspaceId/document')
 export class DocumentController {
-  constructor(private readonly documentService: DocumentService) { }
+  constructor(private readonly documentService: DocumentService, private readonly documentActivityService: DocumentActivityService) { }
 
   @ApiOperation({ summary: "Create Document", description: "Creates a new document inside a workspace and initializes version 1.", })
   @Post()
@@ -38,7 +39,6 @@ export class DocumentController {
     const data = plainToInstance(DocumentListItemDto, documents, { excludeExtraneousValues: true });
     return { message: "Documents fetched successfully.", data };
   }
-
 
   @ApiOperation({ summary: "Get Single Document", description: "Returns document metadata and its current version content." })
   @Get(':documentId')
@@ -123,6 +123,33 @@ export class DocumentController {
     const workspaceMemberId = req.workspaceMember!.id;
     const data = await this.documentService.rollbackToVersion(workspaceId, workspaceMemberId, documentId, Number(version));
     return { message: "Document rolled back successfully.", data };
+  }
+
+
+  //Additional Activity controllers for the document module. (Single API)
+
+  @ApiOperation({ summary: "Get Document Activity", description: "Retrieve activity timeline for a document." })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  @Get(":documentId/activity")
+  async getActivity(
+    @Req() req: Request,
+    @Param("workspaceId") workspaceId: string, @Param("documentId") documentId: string,
+    @Query("page") page?: number, @Query("limit") limit?: number
+  ) {
+    const workspaceMemberId = req.workspaceMember?.id as string;
+    const data = await this.documentActivityService.getActivities(
+      workspaceId,
+      workspaceMemberId,
+      documentId,
+      page ?? 1,
+      limit ?? 20
+    );
+
+    return {
+      message: "Document activity retrieved successfully.",
+      data
+    };
   }
 }
 
