@@ -311,6 +311,9 @@ model WorkspaceMember {
   documents          Document[]
   documentComments   DocumentComment[]
   documentActivities DocumentActivity[]
+  createdTasks       Task[]             @relation("TaskCreator")
+  ownedTasks         Task[]             @relation("TaskOwner")
+  taskAssignees      TaskAssignee[]
 
   @@unique([workspaceId, userId])
   @@index([workspaceId])
@@ -449,59 +452,114 @@ enum TaskStatus {
   ARCHIVED
 }
 
+enum TaskActivityAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  COMMENTED
+  ATTACHMENT_ADDED
+  ATTACHMENT_REMOVED
+  COMPLETED
+}
+
 model Task {
-  id          String       @id @default(cuid())
-  workspaceId String
-  createdBy   String
-  ownerId     String?
-  title       String
-  description String?
-  priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(TODO)
-  dueDate     String?
-  metadata    Json?
-  aiContext   Json?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  completedAt DateTime?
-  deletedAt   DateTime?
+  id           String       @id @default(cuid())
+  workspaceId  String
+  createdBy    String
+  ownerId      String?
+  parentTaskId String?
+  title        String
+  description  String?
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(TODO)
+  dueDate      DateTime?
+  labels       Json?
+  metadata     Json?
+  aiContext    Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  completedAt  DateTime?
+  deletedAt    DateTime?
 
-  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  taskAssignees  TaskAssignee[]
-  taskActivities TaskActivity[]
+  creator    WorkspaceMember  @relation("TaskCreator", fields: [createdBy], references: [id])
+  owner      WorkspaceMember? @relation("TaskOwner", fields: [ownerId], references: [id])
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentTask Task?            @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks   Task[]           @relation("SubTasks")
 
+  taskAssignees   TaskAssignee[]
+  taskActivities  TaskActivity[]
+  taskComments    TaskComment[]
+  taskAttachments TaskAttachment[]
+
+  @@index([workspaceId, status])
   @@index([workspaceId])
   @@index([status])
   @@index([priority])
   @@index([dueDate])
+  @@index([deletedAt])
 }
 
 model TaskAssignee {
-  id         String   @id @default(cuid())
-  taskId     String
-  userId     String
-  assignedBy String?
-  assignedAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  taskId            String
+  workspaceMemberId String
+  assignedBy        String?
+  assignedAt        DateTime @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
 
-  @@unique([taskId, userId])
-  @@index([userId])
+  @@unique([taskId, workspaceMemberId])
+  @@index([workspaceMemberId])
 }
 
 model TaskActivity {
-  id        String   @id @default(cuid())
-  taskId    String
-  action    String // STATUS_CHANGED, ASSIGNED, COMMENTED
-  payload   Json
-  createdBy String
-  createdAt DateTime @default(now())
+  id          String             @id @default(cuid())
+  workspaceId String
+  taskId      String
+  action      TaskActivityAction
+  payload     Json
+  createdBy   String
+  createdAt   DateTime           @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([action])
   @@index([createdAt])
+  @@index([workspaceId])
+}
+
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String
+  content   String
+  createdBy String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([taskId])
+}
+
+model TaskAttachment {
+  id         String    @id @default(cuid())
+  taskId     String
+  fileUrl    String
+  fileName   String
+  uploadedBy String
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }
 
 enum SystemEventStatus {

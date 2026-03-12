@@ -3,6 +3,7 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { CreateDocumentCommentDto } from "./dto/create-document-comment.dto";
 import { DocumentActivityService } from "../document-activity.service";
 import { GetDocumentCommentsQueryDto } from "./dto/other-helper.dto";
+import { validateWorkspaceMember } from "src/common/validators/workspace-member.validator";
 
 
 @Injectable()
@@ -11,11 +12,7 @@ export class DocumentCommentService {
 
     async createComment(workspaceId: string, workspaceMemberId: string, documentId: string, commentData: CreateDocumentCommentDto) {
         return this.prisma.$transaction(async (tx) => {
-            const member = await tx.workspaceMember.findFirst({
-                where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-                select: { role: true }
-            })
-            if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+            const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
             if (!["OWNER", "EDITOR", "COMMENTER"].includes(member.role)) {
                 throw new ForbiddenException("Insufficient permission to comment");
             }
@@ -69,11 +66,7 @@ export class DocumentCommentService {
 
     async resolveComment(workspaceId: string, workspaceMemberId: string, documentId: string, commentId: string) {
         return this.prisma.$transaction(async (tx) => {
-            const member = await tx.workspaceMember.findFirst({
-                where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-                select: { role: true }
-            })
-            if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+            const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
             if (!["OWNER", "EDITOR"].includes(member.role)) {
                 throw new ForbiddenException("Insufficient permission to comment");
             }
@@ -110,11 +103,7 @@ export class DocumentCommentService {
 
     async deleteComment(workspaceId: string, workspaceMemberId: string, documentId: string, commentId: string) {
         return this.prisma.$transaction(async (tx) => {
-            const member = await tx.workspaceMember.findFirst({
-                where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-                select: { role: true }
-            })
-            if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+            const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
             if (member.role === "VIEWER") {
                 throw new ForbiddenException("Insufficient permission to delete comment");
             }
@@ -231,5 +220,4 @@ export class DocumentCommentService {
         ]);
         return { comments, meta: { totalItems: total, page, limit, totalPages: Math.ceil(total / limit) } };
     }
-
 }

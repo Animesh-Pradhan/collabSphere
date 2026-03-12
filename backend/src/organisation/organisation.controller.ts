@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Put, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Put, Query, BadRequestException } from '@nestjs/common';
 import { OrganisationService } from './organisation.service';
 import { CreateOrganisationDto } from './dto/create-organisation.dto';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
@@ -67,9 +67,14 @@ export class OrganisationController {
   }
 
   @Roles(Role.USER)
-  @Post(':id/invite')
-  async inviteMember(@Req() req: any, @Param('id') organisationId: string, @Body() dto: InviteOrganisationMemberDto) {
-    const data = await this.organisationService.inviteMember(req.user.sub as string, organisationId, dto);
+  @Post('invite')
+  async inviteMember(@Req() req: any, @Body() dto: InviteOrganisationMemberDto) {
+    const organisationId = req.user?.ctx.orgId;
+    if (!organisationId) {
+      throw new BadRequestException('Organization context required | (Valid for Organisation user only)');
+    }
+
+    const data = await this.organisationService.inviteMember(req.user.sub as string, organisationId as string, dto);
     return { data, message: 'Invitation sent successfully' };
   }
 

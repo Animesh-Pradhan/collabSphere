@@ -4,6 +4,7 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { DocumentActivityService } from './document-activity.service';
+import { validateWorkspaceMember } from 'src/common/validators/workspace-member.validator';
 
 @Injectable()
 export class DocumentService {
@@ -11,12 +12,7 @@ export class DocumentService {
 
   async create(workspaceId: string, workspaceMemberId: string, createDocumentDto: CreateDocumentDto) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to create document");
 
       const document = await tx.document.create({
@@ -66,12 +62,7 @@ export class DocumentService {
 
   async update(workspaceId: string, workspaceMemberId: string, documentId: string, updateDocumentDto: UpdateDocumentDto) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to update document");
 
       const document = await this.prisma.document.findFirst({
@@ -116,12 +107,7 @@ export class DocumentService {
 
   async remove(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to remove document");
 
       const document = await tx.document.findFirst({
@@ -141,12 +127,7 @@ export class DocumentService {
 
   async lock(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to create document");
 
       const document = await tx.document.findFirst({
@@ -177,12 +158,7 @@ export class DocumentService {
 
   async unlock(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
 
       const document = await tx.document.findFirst({
         where: { id: documentId, workspaceId, deletedAt: null },
@@ -208,12 +184,7 @@ export class DocumentService {
 
   async publish(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member of this workspace");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (member.role !== "OWNER") throw new ForbiddenException("Insufficient permission to publish document");
 
       const document = await tx.document.findFirst({
@@ -235,12 +206,7 @@ export class DocumentService {
 
   async archive(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true },
-      });
-
-      if (!member) throw new ForbiddenException("You are not an active member");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (member.role !== "OWNER") throw new ForbiddenException("Only owner can archive document");
 
       const document = await tx.document.findFirst({
@@ -261,12 +227,7 @@ export class DocumentService {
 
   async restore(workspaceId: string, workspaceMemberId: string, documentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true },
-      });
-
-      if (!member) throw new ForbiddenException("You are not an active member");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (member.role !== "OWNER") throw new ForbiddenException("Only owner can archive document");
 
       const document = await tx.document.findFirst({
@@ -316,12 +277,7 @@ export class DocumentService {
 
   async rollbackToVersion(workspaceId: string, workspaceMemberId: string, documentId: string, versionNumber: number) {
     return this.prisma.$transaction(async (tx) => {
-      const member = await tx.workspaceMember.findFirst({
-        where: { id: workspaceMemberId, workspaceId, status: "ACTIVE" },
-        select: { role: true }
-      })
-
-      if (!member) throw new ForbiddenException("You are not an active member");
+      const member = await validateWorkspaceMember(tx, workspaceId, workspaceMemberId);
       if (!["EDITOR", "OWNER"].includes(member.role)) throw new ForbiddenException("Insufficient permission to rollback document");
 
       const document = await tx.document.findFirst({ where: { id: documentId, workspaceId, deletedAt: null } });
