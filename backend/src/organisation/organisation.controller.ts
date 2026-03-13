@@ -1,3 +1,4 @@
+import type { Request } from "express"
 import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Put, Query, BadRequestException } from '@nestjs/common';
 import { OrganisationService } from './organisation.service';
 import { CreateOrganisationDto } from './dto/create-organisation.dto';
@@ -8,7 +9,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public, Roles } from 'src/common/roles/roles.decorator';
 import { Role } from 'src/common/roles/roles.enum';
 import { UploadInterceptor } from 'src/common/upload/upload.interceptor';
-import { AcceptInviteDto, InviteOrganisationMemberDto } from './dto/other-helpert.dto';
+import { AcceptInviteDto, GetOrgInvitationsQueryDto, InviteOrganisationMemberDto } from './dto/other-helpert.dto';
 
 @ApiTags('Organisation')
 @Controller('organisation')
@@ -39,6 +40,25 @@ export class OrganisationController {
   async findAllById(@Req() req: any) {
     const data = await this.organisationService.findAllById(req.user.sub as string);
     return { message: "All Organisation fetched succesfully.", data }
+  }
+
+  @Roles(Role.USER)
+  @ApiOperation({ summary: "Get all Invitations", description: "Get organisation Invitations made by admin or manager" })
+  @Get('invitations')
+  async findAllInvitations(@Req() req: Request, @Query() query: GetOrgInvitationsQueryDto) {
+    const organisationId = req.user.ctx.orgId;
+    const userId = req.user.sub;
+    if (!organisationId) throw new BadRequestException('Organisation context required');
+
+    const data = await this.organisationService.findAllInvitations(userId, organisationId, query);
+    console.log(data);
+
+    return {
+      message: "Invitation data fetched successfully", data: {
+        invitations: data.data,
+        meta: data.meta
+      }
+    }
   }
 
   @Roles(Role.USER)

@@ -1,6 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsEmail, IsNotEmpty, IsString } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { Role } from "generated/prisma/enums";
+import { BaseQueryDto } from "src/common/dto/base-query.dto";
 
 export class InviteOrganisationMemberDto {
     @ApiProperty({ example: "dr.illuminati.06@gmail.com", description: 'User email address' })
@@ -21,4 +22,23 @@ export class AcceptInviteDto {
     @IsString()
     @IsNotEmpty()
     token: string;
+}
+
+export enum InvitationStatus {
+    PENDING = "PENDING",
+    ACCEPTED = "ACCEPTED",
+    EXPIRED = "EXPIRED",
+    CANCELLED = "CANCELLED"
+}
+
+export class GetOrgInvitationsQueryDto extends BaseQueryDto {
+
+    @ApiPropertyOptional({
+        description: 'Filter by invitation status',
+        enum: InvitationStatus,
+        example: InvitationStatus.PENDING
+    })
+    @IsOptional()
+    @IsEnum(InvitationStatus)
+    status?: InvitationStatus;
 }

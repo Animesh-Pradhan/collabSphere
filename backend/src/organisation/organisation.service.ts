@@ -7,9 +7,10 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { Role } from 'generated/prisma/enums';
 import { Role as PlatformRole } from "src/common/roles/roles.enum";
 import { UploadService } from 'src/common/upload/upload.service';
-import { InviteOrganisationMemberDto } from './dto/other-helpert.dto';
+import { GetOrgInvitationsQueryDto, InviteOrganisationMemberDto } from './dto/other-helpert.dto';
 import { MailService } from 'src/mail/mail.service';
 import { AuthService, GatePayload } from 'src/auth/auth.service';
+import { buildDateRangeCondition, buildSearchCondition, buildSortCondition, executePaginatedQuery } from 'src/utils/query.helper';
 
 @Injectable()
 export class OrganisationService {
@@ -262,5 +263,58 @@ export class OrganisationService {
         organisation: context.organisation ? { id: context.organisation.id, role: context.organisation.role, } : null,
       },
     };
+  }
+
+  async findAllInvitations(userId: string, orgId: string, query: GetOrgInvitationsQueryDto) {
+    const membership = await this.prisma.organisationMember.findFirst({
+      where: { organisationId: orgId, userId, removedAt: null, status: "ACTIVE" },
+      select: { id: true, role: true }
+    });
+    if (!membership) throw new ForbiddenException('Not part of this organisation');
+    if (!['OWNER', 'ADMIN', 'MANAGER'].includes(membership.role)) throw new ForbiddenException('Insufficient permissions');
+
+    let orderBy: any = {};
+    const sortOrder = query.order || 'desc';
+
+    const INVITATION_SORT_FIELDS = new Set(['email', 'status', 'expiresAt', 'role', "invitedAt", "acceptedAt"]);
+    const ORG_SORT_FIELDS = new Set(['name']);
+    const USER_SORT_FIELDS = new Set(['firstName', 'lastName']);
+
+    if (INVITATION_SORT_FIELDS.has(query.sortBy)) {
+      orderBy = buildSortCondition(query.sortBy, sortOrder, INVITATION_SORT_FIELDS, 'invitedAt');
+    } else if (ORG_SORT_FIELDS.has(query.sortBy)) {
+      const orgSort = buildSortCondition(query.sortBy, sortOrder, ORG_SORT_FIELDS, 'name');
+      orderBy = { organisation: orgSort };
+    } else {
+      const userSort = buildSortCondition(query.sortBy, sortOrder, USER_SORT_FIELDS, 'firstName');
+      orderBy = { invitedUser: userSort };
+    }
+
+    const where: any = {
+      organisationId: orgId,
+      ...(query.status && { status: query.status }),
+      ...buildDateRangeCondition(query.fromDate, query.toDate, 'invitedAt'),
+      ...(query.search && {
+        OR: [
+          buildSearchCondition(query.search, ['email']),
+          { organisation: buildSearchCondition(query.search, ['name']) },
+          { invitedUser: buildSearchCondition(query.search, ['firstName', 'lastName']) }
+        ]
+      })
+    };
+
+    return executePaginatedQuery({
+      model: this.prisma.organisationInvite,
+      prismaQuery: {
+        where,
+        include: {
+          organisation: { select: { id: true, name: true } },
+          invitedUser: { select: { id: true, firstName: true, lastName: true, email: true } }
+        },
+        orderBy
+      },
+      page: query.page,
+      limit: query.limit
+    });
   }
 }

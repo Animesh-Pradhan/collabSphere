@@ -45,6 +45,7 @@ model User {
   emailOtps                EmailOtp[]
   workspaceMembers         WorkspaceMember[]
   workspaces               Workspace[]
+  organisationInvites      OrganisationInvite[]
 
   @@index([mobileNo])
   @@index([email])
@@ -146,6 +147,7 @@ model OrganisationInvite {
   acceptedAt     DateTime?
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  invitedUser  User         @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
 
   @@index([tokenHash, status])
   @@index([organisationId])
