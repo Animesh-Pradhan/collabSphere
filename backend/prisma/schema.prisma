@@ -316,6 +316,9 @@ model WorkspaceMember {
   createdTasks       Task[]             @relation("TaskCreator")
   ownedTasks         Task[]             @relation("TaskOwner")
   taskAssignees      TaskAssignee[]
+  taskActivities     TaskActivity[]
+  taskComments       TaskComment[]
+  taskAttachments    TaskAttachment[]
 
   @@unique([workspaceId, userId])
   @@index([workspaceId])
@@ -497,6 +500,7 @@ model Task {
   taskAttachments TaskAttachment[]
 
   @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
   @@index([workspaceId])
   @@index([status])
   @@index([priority])
@@ -523,11 +527,12 @@ model TaskActivity {
   workspaceId String
   taskId      String
   action      TaskActivityAction
-  payload     Json
+  payload     Json?
   createdBy   String
   createdAt   DateTime           @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [createdBy], references: [id])
 
   @@index([taskId])
   @@index([action])
@@ -540,11 +545,15 @@ model TaskComment {
   taskId    String
   content   String
   createdBy String
+  parentId  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task    Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creator WorkspaceMember @relation(fields: [createdBy], references: [id])
+  parent  TaskComment?    @relation("CommentThread", fields: [parentId], references: [id])
+  replies TaskComment[]   @relation("CommentThread")
 
   @@index([taskId, createdAt])
   @@index([taskId])
@@ -559,7 +568,8 @@ model TaskAttachment {
   createdAt  DateTime  @default(now())
   deletedAt  DateTime?
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task     Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader WorkspaceMember @relation(fields: [uploadedBy], references: [id])
 
   @@index([taskId])
 }
@@ -571,10 +581,20 @@ enum SystemEventStatus {
   FAILED
 }
 
+enum AggregateType {
+  ORGANISATION
+  WORKSPACE
+  DOCUMENT
+  TASK
+  CHAT
+  MEETING
+  USER
+}
+
 model SystemEvent {
   id            String            @id @default(cuid())
   event         String // DOCUMENT_UPDATED, TASK_ASSIGNED
-  aggregateType String // workspace | document | task
+  aggregateType AggregateType
   aggregateId   String
   payload       Json
   status        SystemEventStatus @default(PENDING)
