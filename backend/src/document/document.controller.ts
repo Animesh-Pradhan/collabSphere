@@ -1,0 +1,218 @@
+import type { Request } from 'express';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
+import { DocumentService } from './document.service';
+import { CreateDocumentDto } from './dto/create-document.dto';
+import { UpdateDocumentDto } from './dto/update-document.dto';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { JwtGuard } from 'src/auth/jwt.guard';
+import { RolesGuard } from 'src/common/roles/roles.guard';
+import { Roles } from 'src/common/roles/roles.decorator';
+import { Role } from 'src/common/roles/roles.enum';
+import { Throttle } from '@nestjs/throttler';
+import { WorkspaceMemberGuard } from 'src/common/roles/workspace-member.guard';
+import { plainToInstance } from 'class-transformer';
+import { DocumentListItemDto } from './dto/document-list-response.dto';
+import { DocumentActivityService } from './document-activity.service';
+import { AutosaveDocumentDto, FindAllDocumentsQueryDto } from './dto/helper.dto';
+
+
+@ApiTags("Documents - (Workspace)")
+@UseGuards(JwtGuard, RolesGuard, WorkspaceMemberGuard)
+@Roles(Role.USER)
+@Throttle({ long: {} })
+@Controller('workspace/:workspaceId/document')
+export class DocumentController {
+  constructor(private readonly documentService: DocumentService, private readonly documentActivityService: DocumentActivityService) { }
+
+  @ApiOperation({ summary: "Create Document", description: "Creates a new document inside a workspace and initializes version 1.", })
+  @Post()
+  async create(@Param('workspaceId') workspaceId: string, @Req() req: Request, @Body() createDocumentDto: CreateDocumentDto) {
+    const workspaceMemberId = req.workspaceMember?.id;
+
+    const data = await this.documentService.create(workspaceId, workspaceMemberId!, createDocumentDto);
+    return { message: "A document added succesfully.", data };
+  }
+
+  @ApiOperation({ summary: "Get All Documents in Workspace" })
+  @Get()
+  async findAll(@Param('workspaceId') workspaceId: string, @Req() req: Request, @Query() query: FindAllDocumentsQueryDto) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const result = await this.documentService.findAll(workspaceId, workspaceMemberId!, query);
+
+    return {
+      message: "Documents fetched successfully.",
+      data: {
+        documents: plainToInstance(DocumentListItemDto, result.data, { excludeExtraneousValues: true }),
+        meta: result.meta,
+      },
+    };
+  }
+
+  @ApiOperation({ summary: "Get Recent Documents", description: "Retrieve recently accessed documents of the current workspace member." })
+  @Get("recent")
+  async findRecent(@Param("workspaceId") workspaceId: string, @Req() req: Request, @Query() query: FindAllDocumentsQueryDto) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const result = await this.documentService.findRecent(workspaceId, workspaceMemberId!, query);
+
+    return {
+      message: "Recent documents fetched successfully.",
+      data: {
+        documents: plainToInstance(DocumentListItemDto, result.data, { excludeExtraneousValues: true }),
+        meta: result.meta,
+      },
+    };
+  }
+
+  @ApiOperation({ summary: "Get Single Document", description: "Returns document metadata and its current version content." })
+  @Get(':documentId')
+  async findOne(@Param("workspaceId") workspaceId: string, @Req() req: Request, @Param('documentId') documentId: string) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.findOne(workspaceId, workspaceMemberId!, documentId)
+    return { message: "Document details fetched successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Export Document as HTML", description: "Export the latest document content as HTML." })
+  @Get(":documentId/export/html")
+  async exportHtml(@Param("workspaceId") workspaceId: string, @Param("documentId") documentId: string) {
+    const data = await this.documentService.exportHtml(workspaceId, documentId);
+    return { message: "Document exported successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Export Document as Markdown", description: "Export the latest document content as Markdown." })
+  @Get(":documentId/export/markdown")
+  async exportMarkdown(@Param("workspaceId") workspaceId: string, @Param("documentId") documentId: string) {
+    const data = await this.documentService.exportMarkdown(workspaceId, documentId);
+    return { message: "Document exported successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Update Document", description: "Updates document metadata or creates a new version when content changes." })
+  @Patch(':documentId')
+  async update(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request, @Body() updateDocumentDto: UpdateDocumentDto) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.update(workspaceId, workspaceMemberId!, documentId, updateDocumentDto);
+    return { message: "Document updated successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Autosave Document Content", description: "High-frequency draft write. Does not create a version or activity entry." })
+  @Patch(':documentId/autosave')
+  async autosave(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request, @Body() dto: AutosaveDocumentDto) {
+    const workspaceMemberId = req.workspaceMember?.id as string;
+    const data = await this.documentService.autosave(workspaceId, workspaceMemberId, documentId, dto.content);
+    return { message: "Draft saved.", data };
+  }
+
+  @ApiOperation({ summary: "Save Draft as Version", description: "Commits the current autosaved draft as a new document version." })
+  @Post(':documentId/versions')
+  async createVersion(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id as string;
+    const data = await this.documentService.createVersion(workspaceId, workspaceMemberId, documentId);
+    return { message: "Version saved successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Delete Document" })
+  @Delete(':documentId')
+  async remove(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.remove(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document deleted successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Lock Document" })
+  @Post(':documentId/lock')
+  async lock(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.lock(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document locked successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Un-lock Document" })
+  @Post(':documentId/unlock')
+  async unlock(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.unlock(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document unlocked successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Publish Document", description: "Publishes a draft document. Only workspace owner can publish." })
+  @Post(':documentId/publish')
+  async publish(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.publish(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document published successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Archive Document", description: "Archive a document. Only workspace owner can archive." })
+  @Post(':documentId/archive')
+  async archive(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.archive(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document archived successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Restore Document", description: "Restore an archived document back to draft. Only workspace owner can restore." })
+  @Post(':documentId/restore')
+  async restore(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.restore(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document restored to draft successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Duplicate Document", description: "Duplicate a document to a new document. Only workspace owner, editor can duplicate." })
+  @Post(':documentId/duplicate')
+  async duplicate(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember?.id;
+    const data = await this.documentService.duplicate(workspaceId, workspaceMemberId!, documentId);
+    return { message: "Document duplicated successfully.", data };
+  }
+
+  @ApiOperation({ summary: "Get Document Version History", description: "Returns all versions of a document (metadata only)." })
+  @Get(':documentId/versions')
+  async getVersions(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string) {
+    const data = await this.documentService.getVersions(workspaceId, documentId);
+    return { message: "Document versions fetched successfully.", data }
+  }
+
+  @ApiOperation({ summary: "Get Document Version History", description: "Returns all versions of a document (metadata only)." })
+  @Get(':documentId/versions/:version')
+  async getVersionByNumber(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Param('version') version: string) {
+    const data = await this.documentService.getVersionByNumber(workspaceId, documentId, parseInt(version));
+    return { message: "Document versions fetched successfully.", data }
+  }
+
+  @ApiOperation({ summary: "Rollback Document Version", description: "Creates a new version using content from a previous version." })
+  @Post(':documentId/versions/:version/rollback')
+  async rollback(@Param('workspaceId') workspaceId: string, @Param('documentId') documentId: string, @Param('version') version: string, @Req() req: Request) {
+    const workspaceMemberId = req.workspaceMember!.id;
+    const data = await this.documentService.rollbackToVersion(workspaceId, workspaceMemberId, documentId, Number(version));
+    return { message: "Document rolled back successfully.", data };
+  }
+
+
+  //Additional Activity controllers for the document module. (Single API)
+
+  @ApiOperation({ summary: "Get Document Activity", description: "Retrieve activity timeline for a document." })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  @Get(":documentId/activity")
+  async getActivity(
+    @Req() req: Request,
+    @Param("workspaceId") workspaceId: string, @Param("documentId") documentId: string,
+    @Query("page") page?: number, @Query("limit") limit?: number
+  ) {
+    const workspaceMemberId = req.workspaceMember?.id as string;
+    const data = await this.documentActivityService.getActivities(
+      workspaceId,
+      workspaceMemberId,
+      documentId,
+      page ?? 1,
+      limit ?? 20
+    );
+
+    return {
+      message: "Document activity retrieved successfully.",
+      data
+    };
+  }
+}
+
+

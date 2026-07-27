@@ -1,0 +1,672 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                       String               @id @default(cuid())
+  firstName                String
+  lastName                 String
+  email                    String               @unique
+  mobileNo                 String?              @unique @db.VarChar(10)
+  password                 String?
+  avatar                   String?
+  username                 String?              @unique
+  lastActiveOrganisationId String?
+  //AUTH
+  isEmailVerified          Boolean              @default(false)
+  isMobileVerified         Boolean              @default(false)
+  lastLoginAt              DateTime?
+  signupSource             String               @default("email")
+  twoFactorAuthentication  Boolean              @default(false)
+  //SSO
+  googleId                 String?              @unique
+  facebookId               String?              @unique
+  microsoftId              String?              @unique
+  //SECURITY
+  failedAttempts           Int                  @default(0)
+  lockedUntil              DateTime?
+  //ONBARDING
+  isOnboarded              Boolean              @default(false)
+  onBoardingStep           Int                  @default(1)
+  //AUDIT
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  deletedAt                DateTime?
+  membership               OrganisationMember[]
+  userDevice               UserDevice[]
+  userSessions             UserSession[]
+  notificatios             Notification[]
+  emailOtps                EmailOtp[]
+  workspaceMembers         WorkspaceMember[]
+  workspaces               Workspace[]
+  organisationInvites      OrganisationInvite[]
+
+  @@index([mobileNo])
+  @@index([email])
+  @@index([username])
+  @@index([lastLoginAt])
+  @@index([signupSource])
+  @@index([isOnboarded, onBoardingStep])
+  @@index([createdAt])
+}
+
+model Organisation {
+  id                  String               @id @default(cuid())
+  name                String
+  logo                String?
+  slug                String               @unique
+  timezone            String               @default("Asia/Kolkata")
+  address             String?
+  country             String?
+  //BILLING
+  plan                String               @default("free")
+  billingEmail        String?
+  trialEndsAt         DateTime?
+  subscriptionId      String?              @unique
+  billingStatus       String?              @default("active")
+  //SETTINGS
+  aiFeature           Boolean              @default(false)
+  notification        Boolean              @default(true)
+  customDomain        String?              @unique
+  //AUDIT
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  lastActiveAt        DateTime?
+  members             OrganisationMember[]
+  organisationInvites OrganisationInvite[]
+  workspaces          Workspace[]
+
+  @@index([slug])
+  @@index([subscriptionId])
+  @@index([customDomain])
+  @@index([plan])
+  @@index([country])
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  GUEST
+}
+
+enum MemberStatus {
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+model OrganisationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organisationId String
+  role           Role         @default(MEMBER)
+  status         MemberStatus @default(ACTIVE)
+  joinedAt       DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  removedAt      DateTime?
+  lastActiveAt   DateTime?
+  invitedBy      String?
+  invitedAt      DateTime?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organisationId])
+  @@index([organisationId, role])
+  @@index([userId])
+  @@index([organisationId])
+  @@index([role])
+  @@index([status])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model OrganisationInvite {
+  id             String       @id @default(cuid())
+  organisationId String
+  email          String
+  role           Role         @default(MEMBER)
+  tokenHash      String
+  status         InviteStatus @default(PENDING)
+  expiresAt      DateTime
+  invitedBy      String
+  invitedAt      DateTime     @default(now())
+  acceptedAt     DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  invitedUser  User         @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash, status])
+  @@index([organisationId])
+  @@index([email])
+  @@index([status])
+}
+
+model UserDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceType String
+  userAgent  String?
+  ipAddress  String?
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastActive])
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  userId     String
+  gateToken  String   @unique
+  vaultToken String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, isRead, createdAt])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  userId         String?
+  organizationId String?
+  action         String
+  description    String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model EmailOtp {
+  id         String    @id @default(cuid())
+  userId     String
+  email      String
+  otpHash    String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+}
+
+//PHASE-2 MODELS ADDED FROM HERE
+
+enum WorkspaceType {
+  PERSONAL
+  ORGANISATION
+}
+
+model Workspace {
+  id             String        @id @default(cuid())
+  organisationId String? //NULL = personal workspace
+  ownerId        String
+  type           WorkspaceType
+  name           String
+  slug           String?
+  description    String?
+  isDefault      Boolean       @default(false)
+  status         String        @default("active") // active| archived | locked
+  eventStreamKey String?
+  aiEnabled      Boolean       @default(false)
+  aiContext      Json?
+  //RATE LIMITING / SAFETY
+  writeQuota     Int? // per-day write limits
+  readQuota      Int?
+  usedStorage    BigInt        @default(0) // bytes currently used
+  storageQuota   BigInt        @default(10737418240) // 10 GB
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+  archivedAt     DateTime?
+
+  owner              User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organisation       Organisation?      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  workspaceMembers   WorkspaceMember[]
+  documents          Document[]
+  tasks              Task[]
+  documentActivities DocumentActivity[]
+
+  @@unique([organisationId, slug])
+  @@unique([organisationId, isDefault])
+  @@index([organisationId])
+  @@index([ownerId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum WorkspaceRole {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+enum WorkspaceMemberStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  REMOVED
+  LEFT
+}
+
+model WorkspaceMember {
+  id           String                @id @default(cuid())
+  workspaceId  String
+  userId       String?
+  role         WorkspaceRole         @default(VIEWER)
+  status       WorkspaceMemberStatus @default(ACTIVE)
+  invitedBy    String?
+  invitedAt    DateTime?
+  joinedAt     DateTime              @default(now())
+  removedAt    DateTime?
+  externalId   String?
+  source       String                @default("internal")
+  permissions  Json?
+  lastActiveAt DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentComments    DocumentComment[]
+  documentActivities  DocumentActivity[]
+  documentAttachments DocumentAttachment[]
+  createdTasks        Task[]               @relation("TaskCreator")
+  ownedTasks          Task[]               @relation("TaskOwner")
+  taskAssignees       TaskAssignee[]
+  taskActivities      TaskActivity[]
+  taskComments        TaskComment[]
+  taskAttachments     TaskAttachment[]
+  createdDocuments    Document[]           @relation("DocumentCreator")
+  updatedDocuments    Document[]           @relation("DocumentUpdater")
+  lockedDocuments     Document[]           @relation("DocumentLocker")
+  documentFavorites   DocumentFavorite[]
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([status])
+  @@index([role])
+}
+
+enum DocumentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Document {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  title          String
+  description    String?
+  status         DocumentStatus @default(DRAFT)
+  createdBy      String
+  updatedBy      String?
+  currentVersion Int            @default(1)
+  lockedBy       String?
+  lockedAt       DateTime?
+  metadata       Json?
+  aiContext      Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  publishedAt    DateTime?
+  deletedAt      DateTime?
+
+  draftContent   Json? // new — autosave buffer, not versioned
+  draftUpdatedAt DateTime? // new — when autosave last wrote
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdMember       WorkspaceMember      @relation("DocumentCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedMember       WorkspaceMember?     @relation("DocumentUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+  lockedMember        WorkspaceMember?     @relation("DocumentLocker", fields: [lockedBy], references: [id], onDelete: SetNull)
+  documentVersions    DocumentVersion[]
+  documentComments    DocumentComment[]
+  documentActivities  DocumentActivity[]
+  documentAttachments DocumentAttachment[]
+  documentFavorites   DocumentFavorite[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  version    Int
+  content    Json
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  document           Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentComments   DocumentComment[]
+  documentActivities DocumentActivity[]
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+model DocumentComment {
+  id                String    @id @default(cuid())
+  documentId        String
+  documentVersionId String
+  workspaceMemberId String
+  comment           String
+  blockId           String?
+  parentId          String?
+  resolvedAt        DateTime?
+  editedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id])
+
+  parent             DocumentComment?   @relation("CommentThread", fields: [parentId], references: [id])
+  replies            DocumentComment[]  @relation("CommentThread")
+  documentActivities DocumentActivity[]
+
+  @@index([documentId])
+  @@index([workspaceMemberId])
+  @@index([parentId])
+}
+
+enum DocumentActivityType {
+  DOCUMENT_CREATED
+  DOCUMENT_UPDATED
+  DOCUMENT_ROLLED_BACK
+  DOCUMENT_PUBLISHED
+  DOCUMENT_ARCHIVED
+  DOCUMENT_LOCKED
+  DOCUMENT_UNLOCKED
+  DOCUMENT_RESTORED
+
+  ATTACHMENT_ADDED
+  ATTACHMENT_REMOVED
+
+  COMMENT_CREATED
+  COMMENT_RESOLVED
+  COMMENT_DELETED
+
+  FAVORITED
+  UNFAVORITED
+}
+
+model DocumentActivity {
+  id                String               @id @default(cuid())
+  workspaceId       String
+  documentId        String
+  documentVersionId String?
+  workspaceMemberId String
+  commentId         String?
+  type              DocumentActivityType
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: SetNull)
+  workspaceMember WorkspaceMember  @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+  comment         DocumentComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([documentId])
+  @@index([documentVersionId])
+  @@index([workspaceMemberId])
+  @@index([commentId])
+  @@index([createdAt])
+}
+
+enum StorageProvider {
+  LOCAL
+  R2
+}
+
+model DocumentAttachment {
+  id                String          @id @default(cuid())
+  documentId        String
+  workspaceMemberId String
+  fileKey           String
+  storageProvider   StorageProvider @default(LOCAL)
+  fileName          String
+  fileType          String?
+  fileSize          Int?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id])
+
+  @@index([documentId])
+  @@index([workspaceMemberId])
+  @@index([deletedAt])
+}
+
+model DocumentFavorite {
+  id                String          @id @default(cuid())
+  documentId        String
+  workspaceMemberId String
+  createdAt         DateTime        @default(now())
+  document          Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspaceMember   WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, workspaceMemberId])
+  @@index([workspaceMemberId])
+  @@index([documentId])
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  REVIEW
+  DONE
+  ARCHIVED
+}
+
+enum TaskActivityAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  COMMENTED
+  ATTACHMENT_ADDED
+  ATTACHMENT_REMOVED
+  COMPLETED
+}
+
+model Task {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  createdBy    String
+  ownerId      String?
+  parentTaskId String?
+  title        String
+  description  String?
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(TODO)
+  dueDate      DateTime?
+  labels       Json?
+  metadata     Json?
+  aiContext    Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  completedAt  DateTime?
+  deletedAt    DateTime?
+
+  creator    WorkspaceMember  @relation("TaskCreator", fields: [createdBy], references: [id])
+  owner      WorkspaceMember? @relation("TaskOwner", fields: [ownerId], references: [id])
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentTask Task?            @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks   Task[]           @relation("SubTasks")
+
+  taskAssignees   TaskAssignee[]
+  taskActivities  TaskActivity[]
+  taskComments    TaskComment[]
+  taskAttachments TaskAttachment[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+model TaskAssignee {
+  id                String   @id @default(cuid())
+  taskId            String
+  workspaceMemberId String
+  assignedBy        String?
+  assignedAt        DateTime @default(now())
+
+  task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, workspaceMemberId])
+  @@index([workspaceMemberId])
+}
+
+model TaskActivity {
+  id          String             @id @default(cuid())
+  workspaceId String
+  taskId      String
+  action      TaskActivityAction
+  payload     Json?
+  createdBy   String
+  createdAt   DateTime           @default(now())
+
+  task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [createdBy], references: [id])
+
+  @@index([taskId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([workspaceId])
+}
+
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String
+  content   String
+  createdBy String
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  task    Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creator WorkspaceMember @relation(fields: [createdBy], references: [id])
+  parent  TaskComment?    @relation("CommentThread", fields: [parentId], references: [id])
+  replies TaskComment[]   @relation("CommentThread")
+
+  @@index([taskId, createdAt])
+  @@index([taskId])
+}
+
+model TaskAttachment {
+  id         String    @id @default(cuid())
+  taskId     String
+  fileUrl    String
+  fileName   String
+  uploadedBy String
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  task     Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader WorkspaceMember @relation(fields: [uploadedBy], references: [id])
+
+  @@index([taskId])
+}
+
+enum SystemEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum AggregateType {
+  ORGANISATION
+  WORKSPACE
+  DOCUMENT
+  TASK
+  CHAT
+  MEETING
+  USER
+}
+
+model SystemEvent {
+  id            String            @id @default(cuid())
+  event         String // DOCUMENT_UPDATED, TASK_ASSIGNED
+  aggregateType AggregateType
+  aggregateId   String
+  payload       Json
+  status        SystemEventStatus @default(PENDING)
+  retryCount    Int               @default(0)
+  error         String?
+  createdAt     DateTime          @default(now())
+  processedAt   DateTime?
+
+  @@index([event])
+  @@index([aggregateType, aggregateId])
+  @@index([status])
+  @@index([createdAt])
+}

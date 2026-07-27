@@ -1,0 +1,13 @@
+import Providers from "./provider";
+import "./globals.css";
+import "tiptap-extension-resizable-image/styles.css";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <html lang="en" suppressHydrationWarning>
+            <body>
+                <Providers>{children}</Providers>
+            </body>
+        </html>
+    );
+}
